@@ -1,34 +1,19 @@
-output "dns_number_of_record_sets" {
-  description = "The max number of virtual network links with registration"
-  value       = values(azurerm_private_dns_zone.reverse_dns_zone)[*].number_of_record_sets
+output "reverse_zone_ids" {
+  description = "Map of derived reverse zone name to its id (feed these to private-dns-records for PTR content)."
+  value       = { for k, v in azurerm_private_dns_zone.this : k => v.id }
 }
 
-output "dns_zone_id" {
-  description = "The dns zone ids"
-  value       = values(azurerm_private_dns_zone.reverse_dns_zone)[*].id
+output "reverse_zone_names" {
+  description = "The derived in-addr.arpa zone names."
+  value       = local.reverse_zones
 }
 
-output "dns_zone_max_number_of_record_sets" {
-  description = "The max number of record sets"
-  value       = values(azurerm_private_dns_zone.reverse_dns_zone)[*].max_number_of_record_sets
+output "virtual_network_link_ids" {
+  description = "Map of zone|vnet link key to its id."
+  value       = { for k, v in azurerm_private_dns_zone_virtual_network_link.this : k => v.id }
 }
 
-output "dns_zone_max_number_of_virtual_network_links" {
-  description = "The dns max number of virtual network links"
-  value       = values(azurerm_private_dns_zone.reverse_dns_zone)[*].max_number_of_virtual_network_links
-}
-
-output "dns_zone_max_number_of_virtual_network_links_with_registration" {
-  description = "The max number of virtual network links with registration"
-  value       = values(azurerm_private_dns_zone.reverse_dns_zone)[*].max_number_of_virtual_network_links_with_registration
-}
-
-output "dns_zone_name" {
-  description = "The dns zone name"
-  value       = values(azurerm_private_dns_zone.reverse_dns_zone)[*].name
-}
-
-output "vnet_link_id" {
-  description = "The vnet link ids"
-  value       = values(azurerm_private_dns_zone_virtual_network_link.reverse_dns_zone_link)[*].id
+output "zones_per_virtual_network" {
+  description = "Map of vnet id to the reverse zones derived from its address space, for composing PTR records per network."
+  value       = local.zones_per_vnet
 }

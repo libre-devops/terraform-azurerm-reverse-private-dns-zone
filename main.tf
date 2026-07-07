@@ -1,44 +1,66 @@
 locals {
-  #The below locals convert an IP address range into separate elements.  Take 10.0.2.0/24 for example:
-  first_octet = var.create_reverse_dns_zone == true && var.address_range != null ? element(split(".", element(var.address_range, 0)), 0) : null
-  # Gets the first octet of range, so for example, 10
-  second_octet = var.create_reverse_dns_zone == true && var.address_range != null ? element(split(".", element(var.address_range, 0)), 1) : null
-  # Gets the second octet of range, so for example, 0
-  third_octet = var.create_reverse_dns_zone == true && var.address_range != null ? element(split(".", element(var.address_range, 0)), 2) : null
-  # Gets the third octet of range, so for example, 2
-  fourth_element = var.create_reverse_dns_zone == true && var.address_range != null ? element(split(".", element(var.address_range, 0)), 3) : null
-  # Gets the forth element of range, so for example, 0/24
-  fourth_octet = var.create_reverse_dns_zone == true && var.address_range != null && local.fourth_element != null ? element(split("/", local.fourth_element), 0) : null
-  # Gets the fourth element of range, so for example, 0
-  cidr_range = var.create_reverse_dns_zone == true && var.address_range != null && local.fourth_element != null ? element(split("/", local.fourth_element), 1) : null
-  # Gets the the cidr portion of the range, so for example, 24
+  rg_name = provider::azurerm::parse_resource_id(var.resource_group_id)["resource_group_name"]
 
-  # Reconstructs the name using above elements to create, for example, 24-0.2.0.10.in-addr.arpa
-  reverse_zone_name = var.create_reverse_dns_zone == true && var.address_range != null ? format("%d-%d.%d.%d.%d.in-addr.arpa", local.cidr_range, local.fourth_octet, local.third_octet, local.second_octet, local.first_octet) : null
+  # Parse each vnet id into its name and resource group for the data source reads. Keyed by the
+  # full id so identically named vnets in different groups cannot collide.
+  vnets = {
+    for id in var.virtual_network_ids : id => {
+      name    = provider::azurerm::parse_resource_id(id)["resource_name"]
+      rg_name = provider::azurerm::parse_resource_id(id)["resource_group_name"]
+    }
+  }
 }
 
-resource "azurerm_private_dns_zone" "reverse_dns_zone" {
-  for_each = var.create_reverse_dns_zone == true && var.address_range != null ? toset(var.address_range) : []
+data "azurerm_virtual_network" "this" {
+  for_each = local.vnets
 
-  name                = local.reverse_zone_name
-  resource_group_name = var.rg_name
+  resource_group_name = each.value.rg_name
+
+  name = each.value.name
+}
+
+locals {
+  # The smallest octet-boundary zone CONTAINING each CIDR: floor(prefix / 8) reversed network
+  # octets suffixed with in-addr.arpa, clamped to at least one octet (10.70.0.0/24 gives
+  # 0.70.10.in-addr.arpa, a /22 lands in its containing /16 zone, anything wider than /8 lands
+  # in the /8 of its network address). Because the vnets already exist, the derived names are
+  # known at plan time and safe as for_each keys.
+  zones_per_vnet = {
+    for id, v in data.azurerm_virtual_network.this : id => toset([
+      for c in v.address_space :
+      "${join(".", reverse(slice(split(".", split("/", c)[0]), 0, max(1, floor(tonumber(split("/", c)[1]) / 8)))))}.in-addr.arpa"
+    ])
+  }
+
+  reverse_zones = toset(flatten([for id, zones in local.zones_per_vnet : tolist(zones)]))
+}
+
+resource "azurerm_private_dns_zone" "this" {
+  for_each = local.reverse_zones
+
+  resource_group_name = local.rg_name
   tags                = var.tags
+
+  name = each.value
 }
 
-resource "azurerm_private_dns_zone_virtual_network_link" "reverse_dns_zone_link" {
-  for_each              = try(var.link_to_vnet, true) == true && var.create_reverse_dns_zone == true && var.address_range != null ? toset(var.address_range) : []
-  name                  = var.vnet_link_name == null ? "${lower(replace(azurerm_private_dns_zone.reverse_dns_zone[each.key].name, ".", "-"))}-link-to-${local.vnet_name}" : try(var.vnet_link_name, null)
-  resource_group_name   = try(var.rg_name, null)
-  private_dns_zone_name = azurerm_private_dns_zone.reverse_dns_zone[each.key].name
-  virtual_network_id    = try(var.vnet_id, null)
-  tags                  = try(var.tags, null)
-}
+# Every vnet links to every derived zone, so reverse lookups resolve estate-wide, not just for
+# addresses in the vnet's own ranges. Auto-registration stays off: Azure only auto-registers
+# forward records, and a vnet's single registration-enabled link belongs to its forward zone.
+resource "azurerm_private_dns_zone_virtual_network_link" "this" {
+  for_each = {
+    for pair in setproduct(local.reverse_zones, var.virtual_network_ids) :
+    "${pair[0]}|${local.vnets[pair[1]].name}" => {
+      zone    = pair[0]
+      vnet_id = pair[1]
+    }
+  }
 
-resource "azurerm_private_dns_zone_virtual_network_link" "reverse_dns_zone_link_hub" {
-  for_each              = try(var.link_to_vnet, true) == true && var.create_reverse_dns_zone == true && var.attempt_reverse_dns_dns_zone_link_to_hub == true && var.address_range != null ? toset(var.address_range) : []
-  name                  = var.vnet_link_name == null ? "${lower(replace(azurerm_private_dns_zone.reverse_dns_zone[each.key].name, ".", "-"))}-link-to-${local.hub_vnet_name}" : try(var.vnet_link_name, null)
-  resource_group_name   = try(var.rg_name, null)
-  private_dns_zone_name = azurerm_private_dns_zone.reverse_dns_zone[each.key].name
-  virtual_network_id    = try(var.hub_vnet_id, null)
-  tags                  = try(var.tags, null)
+  resource_group_name = local.rg_name
+  tags                = var.tags
+
+  name                  = "link-${local.vnets[each.value.vnet_id].name}"
+  private_dns_zone_name = azurerm_private_dns_zone.this[each.value.zone].name
+  virtual_network_id    = each.value.vnet_id
+  registration_enabled  = false
 }
