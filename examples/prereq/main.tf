@@ -3,6 +3,8 @@ locals {
   rg_name  = "rg-${var.short}-${var.loc}-${terraform.workspace}-001"
   vnet_a   = "vnet-${var.short}-${var.loc}-${terraform.workspace}-001"
   vnet_b   = "vnet-${var.short}-${var.loc}-${terraform.workspace}-002"
+  vnet_c   = "vnet-${var.short}-${var.loc}-${terraform.workspace}-003"
+  vnet_d   = "vnet-${var.short}-${var.loc}-${terraform.workspace}-004"
 }
 
 module "tags" {
@@ -43,6 +45,9 @@ module "network_a" {
   }
 }
 
+# The minimal overlay owns vnets 001/002's namespaces; the complete overlay owns 003/004's.
+# One overlay per vnet is an AZURE RULE: a vnet cannot link to two zones with the same
+# namespace, so two stacks overlaying the same vnet collide (caught live).
 module "network_b" {
   source  = "libre-devops/network/azurerm"
   version = "~> 4.0"
@@ -57,6 +62,42 @@ module "network_b" {
   subnets = {
     "snet-app-${local.vnet_b}" = {
       address_prefixes = ["10.112.0.0/27"]
+    }
+  }
+}
+
+module "network_c" {
+  source  = "libre-devops/network/azurerm"
+  version = "~> 4.0"
+
+  resource_group_id = module.rg.ids[local.rg_name]
+  location          = local.location
+  tags              = module.tags.tags
+
+  vnet_name     = local.vnet_c
+  address_space = ["10.113.0.0/24"]
+
+  subnets = {
+    "snet-app-${local.vnet_c}" = {
+      address_prefixes = ["10.113.0.0/27"]
+    }
+  }
+}
+
+module "network_d" {
+  source  = "libre-devops/network/azurerm"
+  version = "~> 4.0"
+
+  resource_group_id = module.rg.ids[local.rg_name]
+  location          = local.location
+  tags              = module.tags.tags
+
+  vnet_name     = local.vnet_d
+  address_space = ["10.114.0.0/22"]
+
+  subnets = {
+    "snet-app-${local.vnet_d}" = {
+      address_prefixes = ["10.114.0.0/27"]
     }
   }
 }

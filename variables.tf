@@ -20,7 +20,9 @@ variable "virtual_network_ids" {
     only auto-registers forward records, and a vnet's single registration link must stay with
     its forward zone. Populate PTR content with the private-dns-records module. Greenfield
     stacks that know their CIDRs up front should use private-dns-zone's reverse_dns_zone_cidrs
-    instead.
+    instead. ONE OVERLAY PER VNET: Azure refuses to link a vnet to two zones with the same
+    namespace, so a vnet overlaid here must not be overlaid again by another stack or zone set
+    (BadRequest, caught live).
   EOT
   type        = list(string)
 

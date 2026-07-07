@@ -1,14 +1,14 @@
 locals {
   location = lookup(var.regions, var.loc, "uksouth")
   rg_name  = "rg-${var.short}-${var.loc}-${terraform.workspace}-003"
-  zone_a   = "0.111.10.in-addr.arpa"
+  zone_a   = "0.113.10.in-addr.arpa"
 
   # The EXISTING estate from the prereq stack, referenced by constructed ids: an octet-aligned
   # /24 and a deliberately non-octet /22 (its containing /16 zone derives, and the module's
   # check points out the wider coverage).
   estate_rg = "rg-${var.short}-${var.loc}-${terraform.workspace}-001"
-  vnet_a    = "vnet-${var.short}-${var.loc}-${terraform.workspace}-001"
-  vnet_b    = "vnet-${var.short}-${var.loc}-${terraform.workspace}-002"
+  vnet_a    = "vnet-${var.short}-${var.loc}-${terraform.workspace}-003"
+  vnet_b    = "vnet-${var.short}-${var.loc}-${terraform.workspace}-004"
   vnet_ids = [
     "/subscriptions/${data.azurerm_client_config.current.subscription_id}/resourceGroups/${local.estate_rg}/providers/Microsoft.Network/virtualNetworks/${local.vnet_a}",
     "/subscriptions/${data.azurerm_client_config.current.subscription_id}/resourceGroups/${local.estate_rg}/providers/Microsoft.Network/virtualNetworks/${local.vnet_b}",
