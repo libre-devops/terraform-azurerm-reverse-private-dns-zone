@@ -1,10 +1,21 @@
 locals {
   location = lookup(var.regions, var.loc, "uksouth")
-  rg_name  = "rg-${var.short}-${var.loc}-${terraform.workspace}-002"
-  vnet_a   = "vnet-${var.short}-${var.loc}-${terraform.workspace}-002"
-  vnet_b   = "vnet-${var.short}-${var.loc}-${terraform.workspace}-003"
+  rg_name  = "rg-${var.short}-${var.loc}-${terraform.workspace}-003"
   zone_a   = "0.111.10.in-addr.arpa"
+
+  # The EXISTING estate from the prereq stack, referenced by constructed ids: an octet-aligned
+  # /24 and a deliberately non-octet /22 (its containing /16 zone derives, and the module's
+  # check points out the wider coverage).
+  estate_rg = "rg-${var.short}-${var.loc}-${terraform.workspace}-001"
+  vnet_a    = "vnet-${var.short}-${var.loc}-${terraform.workspace}-001"
+  vnet_b    = "vnet-${var.short}-${var.loc}-${terraform.workspace}-002"
+  vnet_ids = [
+    "/subscriptions/${data.azurerm_client_config.current.subscription_id}/resourceGroups/${local.estate_rg}/providers/Microsoft.Network/virtualNetworks/${local.vnet_a}",
+    "/subscriptions/${data.azurerm_client_config.current.subscription_id}/resourceGroups/${local.estate_rg}/providers/Microsoft.Network/virtualNetworks/${local.vnet_b}",
+  ]
 }
+
+data "azurerm_client_config" "current" {}
 
 module "tags" {
   source  = "libre-devops/tags/azurerm"
@@ -24,56 +35,15 @@ module "rg" {
   resource_groups = [{ name = local.rg_name, location = local.location, tags = module.tags.tags }]
 }
 
-# Two "existing" vnets: one octet-aligned /24, one deliberately non-octet /22 to show the
-# containing-zone semantics (it lands in its /16 zone, and the module's check points it out).
-module "network_a" {
-  source  = "libre-devops/network/azurerm"
-  version = "~> 4.0"
-
-  resource_group_id = module.rg.ids[local.rg_name]
-  location          = local.location
-  tags              = module.tags.tags
-
-  vnet_name     = local.vnet_a
-  address_space = ["10.111.0.0/24"]
-
-  subnets = {
-    "snet-app-${local.vnet_a}" = {
-      address_prefixes = ["10.111.0.0/27"]
-    }
-  }
-}
-
-module "network_b" {
-  source  = "libre-devops/network/azurerm"
-  version = "~> 4.0"
-
-  resource_group_id = module.rg.ids[local.rg_name]
-  location          = local.location
-  tags              = module.tags.tags
-
-  vnet_name     = local.vnet_b
-  address_space = ["10.112.0.0/22"]
-
-  subnets = {
-    "snet-app-${local.vnet_b}" = {
-      address_prefixes = ["10.112.0.0/27"]
-    }
-  }
-}
-
-# Complete call: both vnets overlaid. Three derived zones (the /24's own zone, the /22's
-# containing /16 zone), every vnet linked to every zone for estate-wide reverse resolution.
+# Complete call: both estate vnets overlaid. Two derived zones (the /24's exact zone and the
+# /22's containing /16), every vnet linked to every zone for estate-wide reverse resolution.
 module "reverse_dns" {
   source = "../../"
 
   resource_group_id = module.rg.ids[local.rg_name]
   tags              = module.tags.tags
 
-  virtual_network_ids = [
-    module.network_a.vnet_id,
-    module.network_b.vnet_id,
-  ]
+  virtual_network_ids = local.vnet_ids
 }
 
 # PTR content proving the derived zone resolves; the private-dns-records module is the typed

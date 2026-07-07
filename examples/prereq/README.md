@@ -12,10 +12,12 @@
   </a>
 </div>
 
-# Minimal example
+# Prereq example
 
-The smallest valid call to this module: one existing vnet in, its derived reverse zone out, linked back. The environment comes from the
-Terraform workspace (`terraform.workspace`), not a variable. Run it with `just e2e minimal`, which
+The "existing estate" the overlay examples attach to: two vnets (an octet-aligned /24 and a
+non-octet /22) that must exist BEFORE the overlay stacks plan, because the overlay derives its
+zone names from their address spaces. Applied first in CI, destroyed last. The environment comes from the
+Terraform workspace (`terraform.workspace`), not a variable. Run it with `just e2e prereq`, which
 applies the stack then always destroys it.
 
 [![Terraform Registry](https://img.shields.io/badge/registry-libre--devops-7B42BC?logo=terraform&logoColor=white)](https://registry.terraform.io/namespaces/libre-devops)
@@ -26,17 +28,10 @@ applies the stack then always destroys it.
 ```hcl
 locals {
   location = lookup(var.regions, var.loc, "uksouth")
-  rg_name  = "rg-${var.short}-${var.loc}-${terraform.workspace}-002"
-
-  # The EXISTING vnet from the prereq stack, referenced by its constructed id: the overlay
-  # reads networks that must exist before it plans, which is the module's contract (real
-  # callers pass ids from another stack's outputs or remote state).
-  estate_rg = "rg-${var.short}-${var.loc}-${terraform.workspace}-001"
-  vnet_a    = "vnet-${var.short}-${var.loc}-${terraform.workspace}-001"
-  vnet_a_id = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/resourceGroups/${local.estate_rg}/providers/Microsoft.Network/virtualNetworks/${local.vnet_a}"
+  rg_name  = "rg-${var.short}-${var.loc}-${terraform.workspace}-001"
+  vnet_a   = "vnet-${var.short}-${var.loc}-${terraform.workspace}-001"
+  vnet_b   = "vnet-${var.short}-${var.loc}-${terraform.workspace}-002"
 }
-
-data "azurerm_client_config" "current" {}
 
 module "tags" {
   source  = "libre-devops/tags/azurerm"
@@ -55,15 +50,43 @@ module "rg" {
   resource_groups = [{ name = local.rg_name, location = local.location, tags = module.tags.tags }]
 }
 
-# Minimal call: one existing vnet in, its derived reverse zone (0.111.10.in-addr.arpa) out,
-# linked back.
-module "reverse_dns" {
-  source = "../../"
+# The "existing estate" the overlay examples attach to: the overlay reads vnets that must exist
+# BEFORE it plans (its zone names derive from their address spaces), so this stack applies
+# first in CI and is destroyed last.
+module "network_a" {
+  source  = "libre-devops/network/azurerm"
+  version = "~> 4.0"
 
   resource_group_id = module.rg.ids[local.rg_name]
+  location          = local.location
   tags              = module.tags.tags
 
-  virtual_network_ids = [local.vnet_a_id]
+  vnet_name     = local.vnet_a
+  address_space = ["10.111.0.0/24"]
+
+  subnets = {
+    "snet-app-${local.vnet_a}" = {
+      address_prefixes = ["10.111.0.0/27"]
+    }
+  }
+}
+
+module "network_b" {
+  source  = "libre-devops/network/azurerm"
+  version = "~> 4.0"
+
+  resource_group_id = module.rg.ids[local.rg_name]
+  location          = local.location
+  tags              = module.tags.tags
+
+  vnet_name     = local.vnet_b
+  address_space = ["10.112.0.0/22"]
+
+  subnets = {
+    "snet-app-${local.vnet_b}" = {
+      address_prefixes = ["10.112.0.0/27"]
+    }
+  }
 }
 ```
 
@@ -76,23 +99,20 @@ module "reverse_dns" {
 
 ## Providers
 
-| Name | Version |
-|------|---------|
-| <a name="provider_azurerm"></a> [azurerm](#provider\_azurerm) | >= 4.0.0, < 5.0.0 |
+No providers.
 
 ## Modules
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_reverse_dns"></a> [reverse\_dns](#module\_reverse\_dns) | ../../ | n/a |
+| <a name="module_network_a"></a> [network\_a](#module\_network\_a) | libre-devops/network/azurerm | ~> 4.0 |
+| <a name="module_network_b"></a> [network\_b](#module\_network\_b) | libre-devops/network/azurerm | ~> 4.0 |
 | <a name="module_rg"></a> [rg](#module\_rg) | libre-devops/rg/azurerm | ~> 4.0 |
 | <a name="module_tags"></a> [tags](#module\_tags) | libre-devops/tags/azurerm | ~> 4.0 |
 
 ## Resources
 
-| Name | Type |
-|------|------|
-| [azurerm_client_config.current](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/client_config) | data source |
+No resources.
 
 ## Inputs
 
@@ -108,5 +128,5 @@ module "reverse_dns" {
 
 | Name | Description |
 |------|-------------|
-| <a name="output_reverse_zone_names"></a> [reverse\_zone\_names](#output\_reverse\_zone\_names) | The derived reverse zone names. |
+| <a name="output_vnet_ids"></a> [vnet\_ids](#output\_vnet\_ids) | The estate vnet ids the overlay examples attach to. |
 <!-- END_TF_DOCS -->

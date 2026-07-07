@@ -10,7 +10,7 @@ on:
       stack:
         description: Example stack to destroy.
         type: choice
-        options: [minimal, complete]
+        options: [prereq, minimal, complete]
         default: minimal
       workspace:
         description: Terraform workspace (environment).

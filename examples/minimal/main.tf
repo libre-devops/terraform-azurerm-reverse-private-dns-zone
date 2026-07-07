@@ -1,8 +1,16 @@
 locals {
-  location  = lookup(var.regions, var.loc, "uksouth")
-  rg_name   = "rg-${var.short}-${var.loc}-${terraform.workspace}-001"
-  vnet_name = "vnet-${var.short}-${var.loc}-${terraform.workspace}-001"
+  location = lookup(var.regions, var.loc, "uksouth")
+  rg_name  = "rg-${var.short}-${var.loc}-${terraform.workspace}-002"
+
+  # The EXISTING vnet from the prereq stack, referenced by its constructed id: the overlay
+  # reads networks that must exist before it plans, which is the module's contract (real
+  # callers pass ids from another stack's outputs or remote state).
+  estate_rg = "rg-${var.short}-${var.loc}-${terraform.workspace}-001"
+  vnet_a    = "vnet-${var.short}-${var.loc}-${terraform.workspace}-001"
+  vnet_a_id = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/resourceGroups/${local.estate_rg}/providers/Microsoft.Network/virtualNetworks/${local.vnet_a}"
 }
+
+data "azurerm_client_config" "current" {}
 
 module "tags" {
   source  = "libre-devops/tags/azurerm"
@@ -21,27 +29,7 @@ module "rg" {
   resource_groups = [{ name = local.rg_name, location = local.location, tags = module.tags.tags }]
 }
 
-# Stands in for EXISTING network infrastructure; in real use the vnet ids come from another
-# stack's outputs or a data source, and this module never touches the vnets themselves.
-module "network" {
-  source  = "libre-devops/network/azurerm"
-  version = "~> 4.0"
-
-  resource_group_id = module.rg.ids[local.rg_name]
-  location          = local.location
-  tags              = module.tags.tags
-
-  vnet_name     = local.vnet_name
-  address_space = ["10.110.0.0/24"]
-
-  subnets = {
-    "snet-app-${local.vnet_name}" = {
-      address_prefixes = ["10.110.0.0/27"]
-    }
-  }
-}
-
-# Minimal call: one existing vnet in, its derived reverse zone (0.110.10.in-addr.arpa) out,
+# Minimal call: one existing vnet in, its derived reverse zone (0.111.10.in-addr.arpa) out,
 # linked back.
 module "reverse_dns" {
   source = "../../"
@@ -49,5 +37,5 @@ module "reverse_dns" {
   resource_group_id = module.rg.ids[local.rg_name]
   tags              = module.tags.tags
 
-  virtual_network_ids = [module.network.vnet_id]
+  virtual_network_ids = [local.vnet_a_id]
 }

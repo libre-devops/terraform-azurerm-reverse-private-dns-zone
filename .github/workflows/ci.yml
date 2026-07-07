@@ -37,7 +37,7 @@ jobs:
       - name: Validate and test the module and examples
         run: |
           set -euo pipefail
-          for d in . examples/minimal examples/complete; do
+          for d in . examples/prereq examples/minimal examples/complete; do
             echo "== ${d} =="
             terraform -chdir="${d}" init -backend=false -input=false >/dev/null
             terraform -chdir="${d}" validate
@@ -98,7 +98,7 @@ jobs:
         uses: libre-devops/terraform-azure@v1
         with:
           terraform-code-location: examples
-          terraform-stack-to-run-json: '["minimal","complete"]'
+          terraform-stack-to-run-json: '["prereq","minimal","complete"]'
           run-terraform-plan: true
           run-terraform-apply: true
           arm-client-id: ${{ vars.AZURE_CLIENT_ID }}
@@ -114,7 +114,7 @@ jobs:
         uses: libre-devops/terraform-azure@v1
         with:
           terraform-code-location: examples
-          terraform-stack-to-run-json: '["minimal","complete"]'
+          terraform-stack-to-run-json: '["complete","minimal","prereq"]'
           run-terraform-plan: false
           run-terraform-plan-destroy: true
           run-terraform-destroy: true
