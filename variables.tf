@@ -9,14 +9,28 @@ variable "tags" {
   default     = {}
 }
 
+variable "use_classless_zones" {
+  description = <<-EOT
+    How non-octet CIDRs derive their zone. true (default): the documented classless dash form,
+    exact to the range (192.0.2.128/26 gives 128-26.2.0.192.in-addr.arpa, 10.114.0.0/22 gives
+    0-22.114.10.in-addr.arpa), per the Azure private reverse DNS guidance. false: the smallest
+    classful zone CONTAINING the range (a /22 lands in its /16), which is simpler but shadows
+    reverse resolution for the whole containing range in linked vnets; the
+    wide_containing_zones_are_visible check points those out. Octet-aligned CIDRs always derive
+    their exact classful zone either way.
+  EOT
+  type        = bool
+  default     = true
+}
+
 variable "virtual_network_ids" {
   description = <<-EOT
     Ids of EXISTING virtual networks to overlay with reverse DNS. This module is the attach
     pattern (the relationship subnet has to network, or nsg-rules to nsg): it reads each vnet's
-    address space, derives the smallest octet-boundary in-addr.arpa zone containing each CIDR
-    (10.70.0.0/24 gives 0.70.10.in-addr.arpa; a non-octet /22 lands in its containing /16
-    zone), deduplicates across vnets, creates the zones, and links every vnet to every derived
-    zone so reverse lookups resolve estate-wide. Links never enable auto-registration: Azure
+    address space, derives the in-addr.arpa zone for each CIDR (10.70.0.0/24 gives
+    0.70.10.in-addr.arpa; non-octet CIDRs follow use_classless_zones), deduplicates across
+    vnets, creates the zones, and links every vnet to every derived zone so reverse lookups
+    resolve estate-wide. Links never enable auto-registration: Azure
     only auto-registers forward records, and a vnet's single registration link must stay with
     its forward zone. Populate PTR content with the private-dns-records module. Greenfield
     stacks that know their CIDRs up front should use private-dns-zone's reverse_dns_zone_cidrs

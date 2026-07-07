@@ -14,9 +14,9 @@
 
 # Complete example
 
-Overlays two vnets: an octet-aligned /24 (exact zone) and a deliberately non-octet /22
-(containing /16 zone, surfaced by the module's check), with the mesh of links and a PTR record
-proving the derived zone resolves. The environment comes from the Terraform workspace
+Overlays two vnets: an octet-aligned /24 (exact classful zone) and a deliberately non-octet
+/22 (the documented classless dash-form zone, 0-22.114.10.in-addr.arpa), with the mesh of
+links and a PTR record proving the derived zone resolves. The environment comes from the Terraform workspace
 (`terraform.workspace`), not a variable. Run it with `just e2e complete`, which applies the stack
 then always destroys it.
 

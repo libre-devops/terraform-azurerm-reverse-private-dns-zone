@@ -14,9 +14,9 @@
 
 # Complete example
 
-Overlays two vnets: an octet-aligned /24 (exact zone) and a deliberately non-octet /22
-(containing /16 zone, surfaced by the module's check), with the mesh of links and a PTR record
-proving the derived zone resolves. The environment comes from the Terraform workspace
+Overlays two vnets: an octet-aligned /24 (exact classful zone) and a deliberately non-octet
+/22 (the documented classless dash-form zone, 0-22.114.10.in-addr.arpa), with the mesh of
+links and a PTR record proving the derived zone resolves. The environment comes from the Terraform workspace
 (`terraform.workspace`), not a variable. Run it with `just e2e complete`, which applies the stack
 then always destroys it.
 
@@ -32,8 +32,8 @@ locals {
   zone_a   = "0.113.10.in-addr.arpa"
 
   # The EXISTING estate from the prereq stack, referenced by constructed ids: an octet-aligned
-  # /24 and a deliberately non-octet /22 (its containing /16 zone derives, and the module's
-  # check points out the wider coverage).
+  # /24 (exact classful zone) and a deliberately non-octet /22 (the documented classless
+  # dash-form zone derives: 0-22.114.10.in-addr.arpa).
   estate_rg = "rg-${var.short}-${var.loc}-${terraform.workspace}-001"
   vnet_a    = "vnet-${var.short}-${var.loc}-${terraform.workspace}-003"
   vnet_b    = "vnet-${var.short}-${var.loc}-${terraform.workspace}-004"
@@ -63,8 +63,9 @@ module "rg" {
   resource_groups = [{ name = local.rg_name, location = local.location, tags = module.tags.tags }]
 }
 
-# Complete call: both estate vnets overlaid. Two derived zones (the /24's exact zone and the
-# /22's containing /16), every vnet linked to every zone for estate-wide reverse resolution.
+# Complete call: both estate vnets overlaid. Two derived zones (the /24's exact classful zone
+# and the /22's classless dash-form zone), every vnet linked to every zone for estate-wide
+# reverse resolution.
 module "reverse_dns" {
   source = "../../"
 

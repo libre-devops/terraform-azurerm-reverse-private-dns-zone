@@ -49,10 +49,56 @@ run "dedupes_zones_and_meshes_links" {
   }
 }
 
-run "a_non_octet_cidr_lands_in_its_containing_zone" {
+run "a_non_octet_cidr_derives_the_classless_dash_zone" {
   command = plan
 
   variables {
+    virtual_network_ids = [
+      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-ldo-uks-tst-rdns-01/providers/Microsoft.Network/virtualNetworks/vnet-ldo-uks-tst-001",
+    ]
+  }
+
+  override_data {
+    target = data.azurerm_virtual_network.this
+    values = {
+      address_space = ["10.114.0.0/22"]
+    }
+  }
+
+  assert {
+    condition     = contains(keys(azurerm_private_dns_zone.this), "0-22.114.10.in-addr.arpa")
+    error_message = "A /22 should derive its exact classless dash-form zone by default."
+  }
+}
+
+run "the_documented_slash26_example_derives_exactly" {
+  command = plan
+
+  variables {
+    virtual_network_ids = [
+      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-ldo-uks-tst-rdns-01/providers/Microsoft.Network/virtualNetworks/vnet-ldo-uks-tst-001",
+    ]
+  }
+
+  override_data {
+    target = data.azurerm_virtual_network.this
+    values = {
+      address_space = ["192.0.2.128/26"]
+    }
+  }
+
+  assert {
+    condition     = contains(keys(azurerm_private_dns_zone.this), "128-26.2.0.192.in-addr.arpa")
+    error_message = "The Azure private reverse DNS documentation example (192.0.2.128/26) should derive 128-26.2.0.192.in-addr.arpa."
+  }
+}
+
+run "classful_mode_lands_in_the_containing_zone" {
+  command = plan
+
+  variables {
+    use_classless_zones = false
+
     virtual_network_ids = [
       "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-ldo-uks-tst-rdns-01/providers/Microsoft.Network/virtualNetworks/vnet-ldo-uks-tst-001",
     ]
@@ -69,31 +115,7 @@ run "a_non_octet_cidr_lands_in_its_containing_zone" {
 
   assert {
     condition     = contains(keys(azurerm_private_dns_zone.this), "112.10.in-addr.arpa")
-    error_message = "A /22 should land in its containing /16 zone."
-  }
-}
-
-run "a_wide_cidr_clamps_to_its_slash_eight" {
-  command = plan
-
-  variables {
-    virtual_network_ids = [
-      "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-ldo-uks-tst-rdns-01/providers/Microsoft.Network/virtualNetworks/vnet-ldo-uks-tst-001",
-    ]
-  }
-
-  override_data {
-    target = data.azurerm_virtual_network.this
-    values = {
-      address_space = ["10.0.0.0/7"]
-    }
-  }
-
-  expect_failures = [check.wide_containing_zones_are_visible]
-
-  assert {
-    condition     = contains(keys(azurerm_private_dns_zone.this), "10.in-addr.arpa")
-    error_message = "Anything wider than /8 should clamp to the /8 of its network address."
+    error_message = "Classful mode should land a /22 in its containing /16 zone."
   }
 }
 

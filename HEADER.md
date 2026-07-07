@@ -31,11 +31,15 @@ deriving `0.70.10.in-addr.arpa` from `10.70.0.0/24` by hand is exactly the arith
 get wrong. This module is the attach pattern (the relationship subnet has to network, or
 nsg-rules to nsg): it adds reverse DNS to infrastructure you already have, touching nothing.
 
-- **Vnet ids in, zones out**: each existing vnet's address space is read, the smallest
-  octet-boundary zone containing each CIDR is derived (a /24 gets its exact zone; a non-octet
-  /22 lands in its containing /16, which a `check` points out; wider than /8 clamps to the /8
-  of the network address), and duplicates collapse across vnets. Because the vnets already
-  exist, every derived name is plan-known.
+- **Vnet ids in, zones out**: each existing vnet's address space is read and its zone derived.
+  Octet-aligned CIDRs get their exact classful zone (a /24 like 10.70.0.0/24 gives
+  0.70.10.in-addr.arpa). Non-octet CIDRs default to the documented classless dash form, exact
+  to the range (192.0.2.128/26 gives 128-26.2.0.192.in-addr.arpa, a /22 gives
+  0-22.114.10.in-addr.arpa, per the Azure private reverse DNS guidance);
+  use_classless_zones = false falls back to the smallest containing classful zone, which a
+  check points out because it shadows reverse resolution for the whole containing range.
+  Duplicates collapse across vnets, and because the vnets already exist, every derived name is
+  plan-known.
 - **Estate-wide resolution**: every vnet links to every derived zone, so reverse lookups
   resolve across the estate rather than only for a vnet's own ranges. Auto-registration stays
   off on principle: Azure only auto-registers forward records, and a vnet's single

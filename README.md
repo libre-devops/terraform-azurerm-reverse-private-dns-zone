@@ -31,11 +31,15 @@ deriving `0.70.10.in-addr.arpa` from `10.70.0.0/24` by hand is exactly the arith
 get wrong. This module is the attach pattern (the relationship subnet has to network, or
 nsg-rules to nsg): it adds reverse DNS to infrastructure you already have, touching nothing.
 
-- **Vnet ids in, zones out**: each existing vnet's address space is read, the smallest
-  octet-boundary zone containing each CIDR is derived (a /24 gets its exact zone; a non-octet
-  /22 lands in its containing /16, which a `check` points out; wider than /8 clamps to the /8
-  of the network address), and duplicates collapse across vnets. Because the vnets already
-  exist, every derived name is plan-known.
+- **Vnet ids in, zones out**: each existing vnet's address space is read and its zone derived.
+  Octet-aligned CIDRs get their exact classful zone (a /24 like 10.70.0.0/24 gives
+  0.70.10.in-addr.arpa). Non-octet CIDRs default to the documented classless dash form, exact
+  to the range (192.0.2.128/26 gives 128-26.2.0.192.in-addr.arpa, a /22 gives
+  0-22.114.10.in-addr.arpa, per the Azure private reverse DNS guidance);
+  use_classless_zones = false falls back to the smallest containing classful zone, which a
+  check points out because it shadows reverse resolution for the whole containing range.
+  Duplicates collapse across vnets, and because the vnets already exist, every derived name is
+  plan-known.
 - **Estate-wide resolution**: every vnet links to every derived zone, so reverse lookups
   resolve across the estate rather than only for a vnet's own ranges. Auto-registration stays
   off on principle: Azure only auto-registers forward records, and a vnet's single
@@ -80,7 +84,8 @@ No modules.
 |------|-------------|------|---------|:--------:|
 | <a name="input_resource_group_id"></a> [resource\_group\_id](#input\_resource\_group\_id) | Id of the resource group the derived zones and links land in; the name is parsed from the id. | `string` | n/a | yes |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to all resources. | `map(string)` | `{}` | no |
-| <a name="input_virtual_network_ids"></a> [virtual\_network\_ids](#input\_virtual\_network\_ids) | Ids of EXISTING virtual networks to overlay with reverse DNS. This module is the attach<br/>pattern (the relationship subnet has to network, or nsg-rules to nsg): it reads each vnet's<br/>address space, derives the smallest octet-boundary in-addr.arpa zone containing each CIDR<br/>(10.70.0.0/24 gives 0.70.10.in-addr.arpa; a non-octet /22 lands in its containing /16<br/>zone), deduplicates across vnets, creates the zones, and links every vnet to every derived<br/>zone so reverse lookups resolve estate-wide. Links never enable auto-registration: Azure<br/>only auto-registers forward records, and a vnet's single registration link must stay with<br/>its forward zone. Populate PTR content with the private-dns-records module. Greenfield<br/>stacks that know their CIDRs up front should use private-dns-zone's reverse\_dns\_zone\_cidrs<br/>instead. ONE OVERLAY PER VNET: Azure refuses to link a vnet to two zones with the same<br/>namespace, so a vnet overlaid here must not be overlaid again by another stack or zone set<br/>(BadRequest, caught live). | `list(string)` | n/a | yes |
+| <a name="input_use_classless_zones"></a> [use\_classless\_zones](#input\_use\_classless\_zones) | How non-octet CIDRs derive their zone. true (default): the documented classless dash form,<br/>exact to the range (192.0.2.128/26 gives 128-26.2.0.192.in-addr.arpa, 10.114.0.0/22 gives<br/>0-22.114.10.in-addr.arpa), per the Azure private reverse DNS guidance. false: the smallest<br/>classful zone CONTAINING the range (a /22 lands in its /16), which is simpler but shadows<br/>reverse resolution for the whole containing range in linked vnets; the<br/>wide\_containing\_zones\_are\_visible check points those out. Octet-aligned CIDRs always derive<br/>their exact classful zone either way. | `bool` | `true` | no |
+| <a name="input_virtual_network_ids"></a> [virtual\_network\_ids](#input\_virtual\_network\_ids) | Ids of EXISTING virtual networks to overlay with reverse DNS. This module is the attach<br/>pattern (the relationship subnet has to network, or nsg-rules to nsg): it reads each vnet's<br/>address space, derives the in-addr.arpa zone for each CIDR (10.70.0.0/24 gives<br/>0.70.10.in-addr.arpa; non-octet CIDRs follow use\_classless\_zones), deduplicates across<br/>vnets, creates the zones, and links every vnet to every derived zone so reverse lookups<br/>resolve estate-wide. Links never enable auto-registration: Azure<br/>only auto-registers forward records, and a vnet's single registration link must stay with<br/>its forward zone. Populate PTR content with the private-dns-records module. Greenfield<br/>stacks that know their CIDRs up front should use private-dns-zone's reverse\_dns\_zone\_cidrs<br/>instead. ONE OVERLAY PER VNET: Azure refuses to link a vnet to two zones with the same<br/>namespace, so a vnet overlaid here must not be overlaid again by another stack or zone set<br/>(BadRequest, caught live). | `list(string)` | n/a | yes |
 
 ## Outputs
 

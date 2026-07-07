@@ -20,15 +20,23 @@ data "azurerm_virtual_network" "this" {
 }
 
 locals {
-  # The smallest octet-boundary zone CONTAINING each CIDR: floor(prefix / 8) reversed network
-  # octets suffixed with in-addr.arpa, clamped to at least one octet (10.70.0.0/24 gives
-  # 0.70.10.in-addr.arpa, a /22 lands in its containing /16 zone, anything wider than /8 lands
-  # in the /8 of its network address). Because the vnets already exist, the derived names are
-  # known at plan time and safe as for_each keys.
+  # Octet-aligned CIDRs derive their exact classful zone: the network octets reversed and
+  # suffixed with in-addr.arpa (10.70.0.0/24 gives 0.70.10.in-addr.arpa). Non-octet CIDRs
+  # follow use_classless_zones: the documented classless dash form names the zone with the
+  # partial octet and prefix length (192.0.2.128/26 gives 128-26.2.0.192.in-addr.arpa,
+  # 10.114.0.0/22 gives 0-22.114.10.in-addr.arpa), exact to the range; the classful fallback
+  # takes the smallest CONTAINING zone instead, clamped to at least one octet. Because the
+  # vnets already exist, the derived names are known at plan time and safe as for_each keys.
   zones_per_vnet = {
     for id, v in data.azurerm_virtual_network.this : id => toset([
       for c in v.address_space :
-      "${join(".", reverse(slice(split(".", split("/", c)[0]), 0, max(1, floor(tonumber(split("/", c)[1]) / 8)))))}.in-addr.arpa"
+      tonumber(split("/", c)[1]) % 8 == 0
+      ? "${join(".", reverse(slice(split(".", split("/", c)[0]), 0, floor(tonumber(split("/", c)[1]) / 8))))}.in-addr.arpa"
+      : (
+        var.use_classless_zones
+        ? "${split(".", split("/", c)[0])[floor(tonumber(split("/", c)[1]) / 8)]}-${split("/", c)[1]}${floor(tonumber(split("/", c)[1]) / 8) > 0 ? "." : ""}${join(".", reverse(slice(split(".", split("/", c)[0]), 0, floor(tonumber(split("/", c)[1]) / 8))))}.in-addr.arpa"
+        : "${join(".", reverse(slice(split(".", split("/", c)[0]), 0, max(1, floor(tonumber(split("/", c)[1]) / 8)))))}.in-addr.arpa"
+      )
     ])
   }
 
